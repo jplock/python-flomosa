@@ -1,0 +1,4 @@
+*.kpf
+*.pyc
+*.egg-info
+*.swp
