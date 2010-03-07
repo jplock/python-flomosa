@@ -12,8 +12,8 @@ API_VERSION = '0.1'
 
 
 def generate_id():
-    """ Generate a UUID """
-    return str(uuid.uuid4)
+    """Generate a unique UUID"""
+    return str(uuid.uuid4())
 
 
 class APIError(Exception):
@@ -33,7 +33,7 @@ class APIError(Exception):
         except KeyError:
             return None
 
-    def __str__(self):
+    def __unicode__(self):
         return self.__repr__()
 
     def __repr__(self):
@@ -52,15 +52,25 @@ class DecodeError(APIError):
 
 
 class Process(object):
-    def __init__(self, name, desciption=None, id=None):
+    def __init__(self, name, description=None, id=None):
         self.id = id or generate_id()
         self.name = name
         self.description = description
-        self.steps = []
+        self._steps = []
+        self._actions = []
+
+    def __unicode__(self):
+        return self.to_json()
+
+    def __repr__(self):
+        return self.__unicode__()
+
+    def __eq__(self, other):
+        return isinstance(other, Process) and self.id == other.id
 
     @classmethod
     def from_dict(cls, data):
-        if not data:
+        if not data or not isinstance(data, dict):
             return None
 
         process = cls(data['name'], data['description'], data['id'])
@@ -68,38 +78,24 @@ class Process(object):
 
     def to_dict(self):
         return {
+            'kind': 'Process',
             'id': self.id,
             'name': self.name,
-            'description': self.description
+            'description': self.description,
+            'steps': [step.to_dict() for step in self._steps],
+            'actions': [action.to_dict() for action in self._actions]
         }
 
     def to_json(self):
         return json.dumps(self.to_dict())
 
-    def __str__(self):
-        return self.to_json()
-
-    def __hash__(self):
-        return hash(self.id)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.id == other.id
-
-    def add_step(self, step):
-        if not isinstance(step, Step):
-            return False
-
-        return self.steps.append(step)
-
-    def remove_step(self, step):
-        if not isinstance(step, Step):
-            return False
-
-        try:
-            self.steps.remove(step)
-        except ValueError:
-            return False
-        return True
+    def add_step(self, name, teams=None, is_start=False):
+        """Add a step to this process."""
+        if not self._steps:
+            is_start = True
+        step = Step(self, name, is_start=is_start, teams=teams)
+        self._steps.append(step)
+        return step
 
 
 class Team(object):
@@ -107,11 +103,20 @@ class Team(object):
         self.id = id or generate_id()
         self.name = name
         self.description = description
-        self.members = members or {}
+        self.members = members or []
+
+    def __unicode__(self):
+        return self.to_json()
+
+    def __repr__(self):
+        return self.__unicode__()
+
+    def __eq__(self, other):
+        return isinstance(other, Team) and self.id == other.id
 
     @classmethod
     def from_dict(cls, data):
-        if not data:
+        if not data or not isinstance(data, dict):
             return None
 
         team = cls(data['name'], data['description'], data['members'],
@@ -120,6 +125,7 @@ class Team(object):
 
     def to_dict(self):
         return {
+            'kind': 'Team',
             'id': self.id,
             'name': self.name,
             'description': self.description,
@@ -129,139 +135,111 @@ class Team(object):
     def to_json(self):
         return json.dumps(self.to_dict())
 
-    def __str__(self):
-        return self.to_json()
-
-    def __hash__(self):
-        return hash(self.id)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.id == other.id
-
-    def add_member(self, member):
-        return self.members.append(member)
-
-    def remove_member(self, member):
-        try:
-            self.members.remove(member)
-        except ValueError:
-            return False
-        return True
-
-    def set_members(self, members):
-        self.members = members
-
 
 class Step(object):
-    def __init__(self, name, description=None, is_start=False, teams=None,
-        id=None, process=None):
+    def __init__(self, process, name, description=None, is_start=False,
+        teams=None, id=None):
         self.id = id or generate_id()
-        if isinstance(process, Process):
-            self.process = process
+        self.process = process
         self.name = name
         self.description = description
         self.is_start = bool(is_start)
-        self.teams = teams or []
+        self._teams = teams or []
+
+    def __unicode__(self):
+        return self.to_json()
+
+    def __repr__(self):
+        return self.__unicode__()
+
+    def __eq__(self, other):
+        return isinstance(other, Step) and self.id == other.id
 
     @classmethod
     def from_dict(cls, data):
-        if not data:
+        if not data or not isinstance(data, dict):
             return None
 
-        step = cls(data['name'], data['description'], data['is_start'],
-            data['teams'], data['id'])
-        return step
+        team = cls(data['process'], data['name'], data['description'],
+            data['is_start'], data['teams'], data['id'])
+        return team
 
     def to_dict(self):
         return {
+            'kind': 'Step',
             'id': self.id,
+            'process': self.process.id,
             'name': self.name,
             'description': self.description,
             'is_start': bool(self.is_start),
-            'teams': self.teams,
-            'process': self.process
+            'teams': [team.to_dict() for team in self._teams]
         }
 
     def to_json(self):
         return json.dumps(self.to_dict())
 
-    def __str__(self):
-        return self.to_json()
-
-    def __hash__(self):
-        return hash(self.id)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.id == other.id
-
-    def add_team(self, team):
-        if not isinstance(team, Team):
-            return False
-        return self.teams.append(team)
-
-    def remove_team(self, team):
-        if not isinstance(team, Team):
-            return False
-        try:
-            self.teams.remove(team)
-        except ValueError:
-            return False
-        return True
-
-    def set_teams(self, teams):
-        self.teams = teams
+    def add_action(self, name, next_step=None, is_complete=False):
+        """Add an action after this step."""
+        action = Action(self.process, name, is_complete=is_complete)
+        self.process._actions.append(action)
+        action._incoming.append(self)
+        if isinstance(next_step, Step):
+            action._outgoing.append(next_step)
+        return action
 
 
 class Action(object):
-    def __init__(self, name, is_complete=False, id=None, process=None):
+    def __init__(self, process, name, is_complete=False, id=None):
         self.id = id or generate_id()
-        if isinstance(process, Process):
-            self.process = process
+        self.process = process
         self.name = name
         self.is_complete = bool(is_complete)
+        self._incoming = []
+        self._outgoing = []
+
+    def __unicode__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__unicode__()
+
+    def __eq__(self, other):
+        return isinstance(other, Action) and self.id == other.id
 
     @classmethod
     def from_dict(cls, data):
-        if not data:
+        if not data or not isinstance(data, dict):
             return None
 
-        action = cls(data['name'], data['is_complete'], data['id'])
+        action = cls(data['process'], data['name'], data['is_complete'],
+            data['id'])
         return action
 
     def to_dict(self):
         return {
+            'kind': 'Action',
             'id': self.id,
+            'process': self.process.id,
             'name': self.name,
             'is_complete': bool(self.is_complete),
-            'process': self.process
+            'incoming': [step.to_dict() for step in self._incoming],
+            'outgoing': [step.to_dict() for step in self._outgoing]
         }
 
     def to_json(self):
         return json.dumps(self.to_dict())
 
-    def __str__(self):
-        return self.to_json()
-
-    def __hash__(self):
-        return hash(self.id)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.id == other.id
-
-
 class Client(object):
-    realm = 'http://127.0.0.1:8080'
+    realm = 'http://flomosa.appspot.com'
     debug = True
     endpoints = {
         'processes': 'processes/%(id)s.json',
-        'steps': 'steps/%(id)s.json',
-        'teams': 'teams/%(id)s.json',
-        'actions': 'actions/%(id)s.json',
-        'requests': 'requests/%(id)s.json'
+        'requests': 'requests/%(id)s.json',
+        'teams': 'teams/%(id)s.json'
     }
 
-    def __init__(self, key, secret, api_version=API_VERSION, host='127.0.0.1',
-        port=8080):
+    def __init__(self, key, secret, api_version=API_VERSION,
+        host='flomosa.appspot.com', port=80):
         self.host = host
         self.port = port
         self.consumer = oauth.Consumer(key, secret)
@@ -269,7 +247,10 @@ class Client(object):
         self.secret = secret
         self.api_version = api_version
         self.signature = oauth.SignatureMethod_HMAC_SHA1()
-        self.uri = 'http://%s:%s' % (host, port)
+        if port == 443:
+            self.uri = 'https://%s' % host
+        else:
+            self.uri = 'http://%s:%s' % (host, port)
         self.http = Http()
 
     def __unicode__(self):
@@ -294,10 +275,41 @@ class Client(object):
             raise Exception('Process has no name.')
 
         endpoint = self.endpoint('processes', id=process.id)
-        self._request(endpoint, 'POST', process.to_json())
+        self._request(endpoint, 'PUT', process.to_json())
+
+    def update_process(self, process):
+        return self.add_process(process)
+
+    def get_process(self, id):
+        endpoint = self.endpoint('processes', id=id)
+        return Process.from_dict(self._request(endpoint, 'GET'))
 
     def delete_process(self, id):
+        if isinstance(id, Process):
+            id = id.id
         endpoint = self.endpoint('processes', id=id)
+        self._request(endpoint, 'DELETE')
+
+    def add_team(self, team):
+        if not hasattr(team, 'name'):
+            raise Exception('Team has no name.')
+        if not hasattr(team, 'members') or not team.members:
+            raise Exception('Team has no members assigned.')
+
+        endpoint = self.endpoint('teams', id=team.id)
+        self._request(endpoint, 'PUT', team.to_json())
+
+    def update_team(self, team):
+        return self.add_team(team)
+
+    def get_team(self, id):
+        endpoint = self.endpoint('teams', id=id)
+        return Team.from_dict(self._request(endpoint, 'GET'))
+
+    def delete_team(self, id):
+        if isinstance(id, Team):
+            id = id.id
+        endpoint = self.endpoint('teams', id=id)
         self._request(endpoint, 'DELETE')
 
     def _request(self, endpoint, method, data=None):
