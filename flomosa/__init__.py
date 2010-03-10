@@ -33,10 +33,10 @@ class APIError(Exception):
         except KeyError:
             return None
 
-    def __unicode__(self):
-        return self.__repr__()
+    def __str__(self):
+        return self.__unicode__()
 
-    def __repr__(self):
+    def __unicode__(self):
         return '%s (#%s)' % (self._message, self._code)
 
 
@@ -47,7 +47,7 @@ class DecodeError(APIError):
         APIError.__init__(self, 0, 'Could not decode JSON.', headers)
         self._body = body
 
-    def __repr__(self):
+    def __unicode__(self):
         return '%s - %s' % (self._headers, self._body)
 
 
@@ -56,13 +56,16 @@ class Process(object):
         self.id = id or generate_id()
         self.name = name
         self.description = description
-        self._steps = []
-        self._actions = []
+        self._steps = {}
+        self._actions = {}
+
+        if not self.name or not self.id:
+            raise ValueError('Name and ID must be set.')
 
     def __unicode__(self):
         return self.to_json()
 
-    def __repr__(self):
+    def __str__(self):
         return self.__unicode__()
 
     def __eq__(self, other):
@@ -73,7 +76,11 @@ class Process(object):
         if not data or not isinstance(data, dict):
             return None
 
-        process = cls(data['name'], data['description'], data['id'])
+        name = data.get('name', None)
+        description = data.get('description', None)
+        id = data.get('id', None)
+
+        process = cls(name=name, description=description, id=id)
         return process
 
     def to_dict(self):
@@ -89,12 +96,12 @@ class Process(object):
     def to_json(self):
         return json.dumps(self.to_dict())
 
-    def add_step(self, name, teams=None, is_start=False):
+    def add_step(self, name, teams=None, is_start=False, id=None):
         """Add a step to this process."""
         if not self._steps:
             is_start = True
-        step = Step(self, name, is_start=is_start, teams=teams)
-        self._steps.append(step)
+        step = Step(self, name, is_start=is_start, teams=teams, id=id)
+        self._steps[step.id] = step
         return step
 
 
@@ -105,10 +112,13 @@ class Team(object):
         self.description = description
         self.members = members or []
 
+        if not self.name or not self.id:
+            raise ValueError('Name and ID must be set.')
+
     def __unicode__(self):
         return self.to_json()
 
-    def __repr__(self):
+    def __str__(self):
         return self.__unicode__()
 
     def __eq__(self, other):
@@ -119,8 +129,12 @@ class Team(object):
         if not data or not isinstance(data, dict):
             return None
 
-        team = cls(data['name'], data['description'], data['members'],
-            data['id'])
+        name = data.get('name', None)
+        description = data.get('description', None)
+        members = data.get('members', None)
+        id = data.get('id', None)
+
+        team = cls(name=name, description=description, members=members, id=id)
         return team
 
     def to_dict(self):
@@ -144,12 +158,19 @@ class Step(object):
         self.name = name
         self.description = description
         self.is_start = bool(is_start)
-        self._teams = teams or []
+        self.teams = teams or []
+
+        if not self.process or not self.name or not self.id:
+            raise ValueError('Process, Name and ID must be set.')
+        elif not isinstance(self.process, Process):
+            raise ValueError('Process must be a valid Process instance.')
+        else:
+            self.process._steps[self.id] = self
 
     def __unicode__(self):
         return self.to_json()
 
-    def __repr__(self):
+    def __str__(self):
         return self.__unicode__()
 
     def __eq__(self, other):
@@ -160,9 +181,16 @@ class Step(object):
         if not data or not isinstance(data, dict):
             return None
 
-        team = cls(data['process'], data['name'], data['description'],
-            data['is_start'], data['teams'], data['id'])
-        return team
+        id = data.get('id', None)
+        process = data.get('process', None)
+        name = data.get('name', None)
+        description = data.get('description', None)
+        is_start = data.get('is_start', None)
+        teams = data.get('teams', None)
+
+        step = cls(process=process, name=name, description=description,
+            is_start=is_start, teams=teams, id=id)
+        return step
 
     def to_dict(self):
         return {
@@ -172,19 +200,18 @@ class Step(object):
             'name': self.name,
             'description': self.description,
             'is_start': bool(self.is_start),
-            'teams': [team.to_dict() for team in self._teams]
+            'teams': [team.to_dict() for team in self.teams]
         }
 
     def to_json(self):
         return json.dumps(self.to_dict())
 
-    def add_action(self, name, next_step=None, is_complete=False):
+    def add_action(self, name, next_step=None, is_complete=False, id=None):
         """Add an action after this step."""
-        action = Action(self.process, name, is_complete=is_complete)
-        self.process._actions.append(action)
-        action._incoming.append(self)
+        action = Action(self.process, name, is_complete=is_complete, id=id)
+        action.add_incoming_step(self)
         if isinstance(next_step, Step):
-            action._outgoing.append(next_step)
+            action.outgoing.append(next_step)
         return action
 
 
@@ -194,13 +221,20 @@ class Action(object):
         self.process = process
         self.name = name
         self.is_complete = bool(is_complete)
-        self._incoming = []
-        self._outgoing = []
+        self._incoming = {}
+        self._outgoing = {}
+
+        if not self.process or not self.name or not self.id:
+            raise ValueError('Process, Name and ID must be set.')
+        elif not isinstance(self.process, Process):
+            raise ValueError('Must be a valid Process instance.')
+        else:
+            self.process._actions[self.id] = self
 
     def __unicode__(self):
-        return self.name
+        return self.to_json()
 
-    def __repr__(self):
+    def __str__(self):
         return self.__unicode__()
 
     def __eq__(self, other):
@@ -208,14 +242,32 @@ class Action(object):
 
     @classmethod
     def from_dict(cls, data):
+        """Create an Action object from a dict object."""
         if not data or not isinstance(data, dict):
             return None
 
-        action = cls(data['process'], data['name'], data['is_complete'],
-            data['id'])
+        process = data.get('process', None)
+        name = data.get('name', None)
+        is_complete = data.get('is_complete', None)
+        id = data.get('id', None)
+
+        action = cls(process=process, name=name, is_complete=is_complete, id=id)
         return action
 
+    def add_incoming_step(self, step):
+        """Add an incoming Step to this Action."""
+        if not isinstance(step, Step):
+            raise ValueError('Must be a valid Step instance.')
+        self._incoming[step.id] = step
+
+    def add_outgoing_step(self, step):
+        """Add an outgoing Step to this Action."""
+        if not isinstance(step, Step):
+            raise ValueError('Must be a valid Step instance.')
+        self._outgoing[step.id] = step
+
     def to_dict(self):
+        """Return the Action as a dict object."""
         return {
             'kind': 'Action',
             'id': self.id,
@@ -227,6 +279,7 @@ class Action(object):
         }
 
     def to_json(self):
+        """Return the Action as a JSON object."""
         return json.dumps(self.to_dict())
 
 class Client(object):
@@ -256,7 +309,7 @@ class Client(object):
     def __unicode__(self):
         return '%s (%s, %s)' % (self.uri, self.secret, self.key)
 
-    def __repr__(self):
+    def __str__(self):
         return self.__unicode__()
 
     def endpoint(self, name, **kwargs):

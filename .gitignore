@@ -1,4 +1,5 @@
 *.kpf
-*.pyc
+*.py?
 *.egg-info
 *.swp
+.coverage
