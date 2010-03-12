@@ -1,17 +1,43 @@
+"""
+The MIT License
+
+Copyright (c) 2010 Flomosa, LLC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
 import uuid
+import urllib
+import time
 import oauth2 as oauth
 from httplib2 import Http
 from urlparse import urljoin
 
 try:
-    import simplejson as json
-except ImportError:
     import json
+except ImportError:
+    import simplejson as json
 
 API_VERSION = '0.1'
 
 
-def generate_id():
+def generate_key():
     """Generate a unique UUID"""
     return str(uuid.uuid4())
 
@@ -23,6 +49,7 @@ class APIError(Exception):
         self._code = code
         self._message = message
         self._headers = headers
+        Exception.__init__(self, message)
 
     def __getitem__(self, key):
         if key == 'code':
@@ -52,15 +79,17 @@ class DecodeError(APIError):
 
 
 class Process(object):
-    def __init__(self, name, description=None, id=None):
-        self.id = id or generate_id()
+    """Flomosa Process object"""
+
+    def __init__(self, name, description=None, key=None):
+        self.key = key or generate_key()
         self.name = name
         self.description = description
         self._steps = {}
         self._actions = {}
 
-        if not self.name or not self.id:
-            raise ValueError('Name and ID must be set.')
+        if not self.name or not self.key:
+            raise ValueError('Name and Key must be set.')
 
     def __unicode__(self):
         return self.to_json()
@@ -69,51 +98,57 @@ class Process(object):
         return self.__unicode__()
 
     def __eq__(self, other):
-        return isinstance(other, Process) and self.id == other.id
+        return isinstance(other, self.__class__) and self.key == other.key
 
     @classmethod
     def from_dict(cls, data):
+        """Return a new Process instance from a dict object."""
         if not data or not isinstance(data, dict):
             return None
 
         name = data.get('name', None)
         description = data.get('description', None)
-        id = data.get('id', None)
+        key = data.get('key', None)
 
-        process = cls(name=name, description=description, id=id)
+        process = cls(name=name, description=description, key=key)
         return process
 
     def to_dict(self):
+        """Return process as a dict object."""
         return {
             'kind': 'Process',
-            'id': self.id,
+            'id': self.key,
             'name': self.name,
             'description': self.description,
-            'steps': [step.to_dict() for step in self._steps],
-            'actions': [action.to_dict() for action in self._actions]
+            'steps': [step.to_dict() for step in self._steps.itervalues()],
+            'actions': [action.to_dict() for action in
+                self._actions.itervalues()]
         }
 
     def to_json(self):
+        """Return process as a JSON string."""
         return json.dumps(self.to_dict())
 
-    def add_step(self, name, teams=None, is_start=False, id=None):
+    def add_step(self, name, teams=None, is_start=False, key=None):
         """Add a step to this process."""
         if not self._steps:
             is_start = True
-        step = Step(self, name, is_start=is_start, teams=teams, id=id)
-        self._steps[step.id] = step
+        step = Step(self, name, is_start=is_start, teams=teams, key=key)
+        self._steps[step.key] = step
         return step
 
 
 class Team(object):
-    def __init__(self, name, description=None, members=None, id=None):
-        self.id = id or generate_id()
+    """Flomosa Team object"""
+
+    def __init__(self, name, description=None, members=None, key=None):
+        self.key = key or generate_key()
         self.name = name
         self.description = description
         self.members = members or []
 
-        if not self.name or not self.id:
-            raise ValueError('Name and ID must be set.')
+        if not self.name or not self.key:
+            raise ValueError('Name and Key must be set.')
 
     def __unicode__(self):
         return self.to_json()
@@ -122,50 +157,55 @@ class Team(object):
         return self.__unicode__()
 
     def __eq__(self, other):
-        return isinstance(other, Team) and self.id == other.id
+        return isinstance(other, self.__class__) and self.key == other.key
 
     @classmethod
     def from_dict(cls, data):
+        """Return a new Team instance from a dict object."""
         if not data or not isinstance(data, dict):
             return None
 
         name = data.get('name', None)
         description = data.get('description', None)
         members = data.get('members', None)
-        id = data.get('id', None)
+        key = data.get('key', None)
 
-        team = cls(name=name, description=description, members=members, id=id)
+        team = cls(name=name, description=description, members=members, key=key)
         return team
 
     def to_dict(self):
+        """Return team as a dict object."""
         return {
             'kind': 'Team',
-            'id': self.id,
+            'key': self.key,
             'name': self.name,
             'description': self.description,
             'members': self.members
         }
 
     def to_json(self):
+        """Return team as a JSON string."""
         return json.dumps(self.to_dict())
 
 
 class Step(object):
+    """Flomosa Step object"""
+
     def __init__(self, process, name, description=None, is_start=False,
-        teams=None, id=None):
-        self.id = id or generate_id()
+        teams=None, key=None):
+        self.key = key or generate_key()
         self.process = process
         self.name = name
         self.description = description
         self.is_start = bool(is_start)
         self.teams = teams or []
 
-        if not self.process or not self.name or not self.id:
-            raise ValueError('Process, Name and ID must be set.')
+        if not self.process or not self.name or not self.key:
+            raise ValueError('Process, Name and Key must be set.')
         elif not isinstance(self.process, Process):
             raise ValueError('Process must be a valid Process instance.')
         else:
-            self.process._steps[self.id] = self
+            self.process._steps[self.key] = self
 
     def __unicode__(self):
         return self.to_json()
@@ -174,14 +214,15 @@ class Step(object):
         return self.__unicode__()
 
     def __eq__(self, other):
-        return isinstance(other, Step) and self.id == other.id
+        return isinstance(other, self.__class__) and self.key == other.key
 
     @classmethod
     def from_dict(cls, data):
+        """Return a new Step instance from a dict object."""
         if not data or not isinstance(data, dict):
             return None
 
-        id = data.get('id', None)
+        key = data.get('key', None)
         process = data.get('process', None)
         name = data.get('name', None)
         description = data.get('description', None)
@@ -189,14 +230,15 @@ class Step(object):
         teams = data.get('teams', None)
 
         step = cls(process=process, name=name, description=description,
-            is_start=is_start, teams=teams, id=id)
+            is_start=is_start, teams=teams, key=key)
         return step
 
     def to_dict(self):
+        """Return step as a dict object."""
         return {
             'kind': 'Step',
-            'id': self.id,
-            'process': self.process.id,
+            'key': self.key,
+            'process': self.process.key,
             'name': self.name,
             'description': self.description,
             'is_start': bool(self.is_start),
@@ -204,32 +246,35 @@ class Step(object):
         }
 
     def to_json(self):
+        """Return step as a JSON string."""
         return json.dumps(self.to_dict())
 
-    def add_action(self, name, next_step=None, is_complete=False, id=None):
+    def add_action(self, name, next_step=None, is_complete=False, key=None):
         """Add an action after this step."""
-        action = Action(self.process, name, is_complete=is_complete, id=id)
+        action = Action(self.process, name, is_complete=is_complete, key=key)
         action.add_incoming_step(self)
         if isinstance(next_step, Step):
-            action.outgoing.append(next_step)
+            action.add_outgoing_step(next_step)
         return action
 
 
 class Action(object):
-    def __init__(self, process, name, is_complete=False, id=None):
-        self.id = id or generate_id()
+    """Flomosa Action object"""
+
+    def __init__(self, process, name, is_complete=False, key=None):
+        self.key = key or generate_key()
         self.process = process
         self.name = name
         self.is_complete = bool(is_complete)
         self._incoming = {}
         self._outgoing = {}
 
-        if not self.process or not self.name or not self.id:
-            raise ValueError('Process, Name and ID must be set.')
+        if not self.process or not self.name or not self.key:
+            raise ValueError('Process, Name and Key must be set.')
         elif not isinstance(self.process, Process):
             raise ValueError('Must be a valid Process instance.')
         else:
-            self.process._actions[self.id] = self
+            self.process._actions[self.key] = self
 
     def __unicode__(self):
         return self.to_json()
@@ -238,57 +283,110 @@ class Action(object):
         return self.__unicode__()
 
     def __eq__(self, other):
-        return isinstance(other, Action) and self.id == other.id
+        return isinstance(other, self.__class__) and self.key == other.key
 
     @classmethod
     def from_dict(cls, data):
-        """Create an Action object from a dict object."""
+        """Return a new Action instance from a dict object."""
         if not data or not isinstance(data, dict):
             return None
 
         process = data.get('process', None)
         name = data.get('name', None)
         is_complete = data.get('is_complete', None)
-        id = data.get('id', None)
+        key = data.get('key', None)
 
-        action = cls(process=process, name=name, is_complete=is_complete, id=id)
+        action = cls(process=process, name=name, is_complete=is_complete,
+            key=key)
         return action
 
     def add_incoming_step(self, step):
         """Add an incoming Step to this Action."""
         if not isinstance(step, Step):
             raise ValueError('Must be a valid Step instance.')
-        self._incoming[step.id] = step
+        self._incoming[step.key] = step
 
     def add_outgoing_step(self, step):
         """Add an outgoing Step to this Action."""
         if not isinstance(step, Step):
             raise ValueError('Must be a valid Step instance.')
-        self._outgoing[step.id] = step
+        self._outgoing[step.key] = step
 
     def to_dict(self):
-        """Return the Action as a dict object."""
+        """Return action as a dict object."""
         return {
             'kind': 'Action',
-            'id': self.id,
-            'process': self.process.id,
+            'key': self.key,
+            'process': self.process.key,
             'name': self.name,
             'is_complete': bool(self.is_complete),
-            'incoming': [step.to_dict() for step in self._incoming],
-            'outgoing': [step.to_dict() for step in self._outgoing]
+            'incoming': [step.to_dict() for step in
+                self._incoming.itervalues()],
+            'outgoing': [step.to_dict() for step in
+                self._outgoing.itervalues()]
         }
 
     def to_json(self):
-        """Return the Action as a JSON object."""
+        """Return action as a JSON string."""
         return json.dumps(self.to_dict())
+
+
+class Request(object):
+    """Flomosa Request object"""
+
+    def __init__(self, process, requestor, key=None):
+        self.key = key or generate_key()
+        self.process = process
+        self.requestor = requestor
+
+    def __unicode__(self):
+        return self.to_json()
+
+    def __str__(self):
+        return self.__unicode__()
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.key == other.key
+
+    @classmethod
+    def from_dict(cls, data):
+        """Return a new Request instance from a dict object."""
+        if not data or not isinstance(data, dict):
+            return None
+
+        process = data.get('process', None)
+        requestor = data.get('requestor', None)
+        key = data.get('key', None)
+
+        request = cls(process=process, requestor=requestor, key=key)
+        for key, value in data.iteritems():
+            if not hasattr(request, key):
+                setattr(request, key, value)
+
+        return request
+
+    def to_dict(self):
+        """Return request as a dict object."""
+        data = {'kind': 'Request'}
+        for key in dir(self):
+            data[key] = getattr(self, key)
+        return data
+
+    def to_json(self):
+        """Return request as a JSON string."""
+        return json.dumps(self.to_dict())
+
 
 class Client(object):
     realm = 'http://flomosa.appspot.com'
-    debug = True
+    debug = False
     endpoints = {
-        'processes': 'processes/%(id)s.json',
-        'requests': 'requests/%(id)s.json',
-        'teams': 'teams/%(id)s.json'
+        'processes': 'processes/%(key)s.json',
+        'process_stats': 'stats/process/%(key)s.json',
+        'process_search': 'search/process/%(key)s.json',
+        'teams': 'teams/%(key)s.json',
+        'step_stats': 'stats/step/%(key)s.json',
+        'step_search': 'search/step/%(key)s.json'
     }
 
     def __init__(self, key, secret, api_version=API_VERSION,
@@ -324,46 +422,62 @@ class Client(object):
         return urljoin(urljoin(self.uri, '/'), endpoint)
 
     def add_process(self, process):
-        if not hasattr(process, 'name'):
-            raise Exception('Process has no name.')
+        endpoint = self.endpoint('processes', key=process.key)
+        return self._request(endpoint, 'PUT', process.to_json())
 
-        endpoint = self.endpoint('processes', id=process.id)
-        self._request(endpoint, 'PUT', process.to_json())
-
-    def update_process(self, process):
-        return self.add_process(process)
-
-    def get_process(self, id):
-        endpoint = self.endpoint('processes', id=id)
+    def get_process(self, key):
+        endpoint = self.endpoint('processes', key=key)
         return Process.from_dict(self._request(endpoint, 'GET'))
 
-    def delete_process(self, id):
-        if isinstance(id, Process):
-            id = id.id
-        endpoint = self.endpoint('processes', id=id)
-        self._request(endpoint, 'DELETE')
+    def delete_process(self, key):
+        endpoint = self.endpoint('processes', key=key)
+        return self._request(endpoint, 'DELETE')
 
     def add_team(self, team):
-        if not hasattr(team, 'name'):
-            raise Exception('Team has no name.')
-        if not hasattr(team, 'members') or not team.members:
-            raise Exception('Team has no members assigned.')
+        endpoint = self.endpoint('teams', key=team.key)
+        return self._request(endpoint, 'PUT', team.to_json())
 
-        endpoint = self.endpoint('teams', id=team.id)
-        self._request(endpoint, 'PUT', team.to_json())
-
-    def update_team(self, team):
-        return self.add_team(team)
-
-    def get_team(self, id):
-        endpoint = self.endpoint('teams', id=id)
+    def get_team(self, key):
+        endpoint = self.endpoint('teams', key=key)
         return Team.from_dict(self._request(endpoint, 'GET'))
 
-    def delete_team(self, id):
-        if isinstance(id, Team):
-            id = id.id
-        endpoint = self.endpoint('teams', id=id)
-        self._request(endpoint, 'DELETE')
+    def delete_team(self, key):
+        endpoint = self.endpoint('teams', key=key)
+        return self._request(endpoint, 'DELETE')
+
+    def get_process_stats(self, key):
+        endpoint = self.endpoint('process_stats', key=key)
+        return self._request(endpoint, 'GET')
+
+    def get_step_stats(self, key):
+        endpoint = self.endpoint('step_stats', key=key)
+        return self._request(endpoint, 'GET')
+
+    def search_process(self, key, start=None, end=None, limit=None):
+        data = {}
+        if start is not None:
+            data['start'] = start
+            if end is None:
+                data['end'] = time.time()
+            else:
+                data['end'] = end
+        if limit is not None:
+            data['limit'] = 25
+        endpoint = self.endpoint('process_search', key=key)
+        return self._request(endpoint, 'GET', data)
+
+    def search_step(self, key, start=None, end=None, limit=None):
+        data = {}
+        if start is not None:
+            data['start'] = start
+            if end is None:
+                data['end'] = time.time()
+            else:
+                data['end'] = end
+        if limit is not None:
+            data['limit'] = 25
+        endpoint = self.endpoint('step_search', key=key)
+        return self._request(endpoint, 'GET', data)
 
     def _request(self, endpoint, method, data=None):
         body = None
