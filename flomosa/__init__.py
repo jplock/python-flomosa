@@ -36,6 +36,8 @@ except ImportError:
 
 API_VERSION = '0.1'
 
+_PROCESSES = {}
+_TEAMS = {}
 
 def generate_key():
     """Generate a unique UUID"""
@@ -91,6 +93,8 @@ class Process(object):
         if not self.name or not self.key:
             raise ValueError('Name and Key must be set.')
 
+        _PROCESSES[self.key] = self
+
     def __unicode__(self):
         return self.to_json()
 
@@ -108,16 +112,32 @@ class Process(object):
 
         name = data.get('name', None)
         description = data.get('description', None)
-        key = data.get('key', None)
+        process_key = data.get('key', None)
+        actions = data.get('actions', None)
+        steps = data.get('steps', None)
 
-        process = cls(name=name, description=description, key=key)
+        process = cls(name=name, description=description, key=process_key)
+        for step_data in steps:
+            step = Step.from_dict(step_data)
+            process._steps[step.key] = step
+        for action_data in actions:
+            action = Action.from_dict(action_data)
+            process._actions[action.key] = action
+
         return process
+
+    def get_step_by_name(self, name):
+        """Find a step by it's name."""
+        for step in self._steps.values():
+            if step.name == name:
+                return step
+        return None
 
     def to_dict(self):
         """Return process as a dict object."""
         return {
             'kind': 'Process',
-            'id': self.key,
+            'key': self.key,
             'name': self.name,
             'description': self.description,
             'steps': [step.to_dict() for step in self._steps.itervalues()],
@@ -128,6 +148,26 @@ class Process(object):
     def to_json(self):
         """Return process as a JSON string."""
         return json.dumps(self.to_dict())
+
+    def to_dot(self):
+        """Return process as a Dot graph string."""
+        nodes = ''
+        for step_key, step in self._steps.iteritems():
+            nodes += '"%s" [label="%s"]\n' % (step_key, step.name)
+        nodes += '"finish" [label="Finish"]\n'
+
+        actions = ''
+        for action_key, action in self._actions.iteritems():
+            for incoming_key, incoming in action._incoming.iteritems():
+                if action.is_complete:
+                    actions += '"%s" -> "finish" [label="%s"]\n' % \
+                        (incoming_key, action.name)
+                else:
+                    for outgoing_key, outgoing in action._outgoing.iteritems():
+                        actions += '"%s" -> "%s" [label="%s"]\n' % \
+                            (incoming_key, outgoing_key, action.name)
+
+        return 'digraph "%s" {\n%s\n%s}' % (self.name, nodes, actions)
 
     def add_step(self, name, teams=None, is_start=False, key=None):
         """Add a step to this process."""
@@ -150,6 +190,8 @@ class Team(object):
         if not self.name or not self.key:
             raise ValueError('Name and Key must be set.')
 
+        _TEAMS[self.key] = self
+
     def __unicode__(self):
         return self.to_json()
 
@@ -168,9 +210,10 @@ class Team(object):
         name = data.get('name', None)
         description = data.get('description', None)
         members = data.get('members', None)
-        key = data.get('key', None)
+        team_key = data.get('key', None)
 
-        team = cls(name=name, description=description, members=members, key=key)
+        team = cls(name=name, description=description, members=members,
+            key=team_key)
         return team
 
     def to_dict(self):
@@ -223,11 +266,13 @@ class Step(object):
             return None
 
         key = data.get('key', None)
-        process = data.get('process', None)
+        process_key = data.get('process', None)
         name = data.get('name', None)
         description = data.get('description', None)
         is_start = data.get('is_start', None)
         teams = data.get('teams', None)
+
+        process = _PROCESSES.get(process_key, None)
 
         step = cls(process=process, name=name, description=description,
             is_start=is_start, teams=teams, key=key)
@@ -242,7 +287,7 @@ class Step(object):
             'name': self.name,
             'description': self.description,
             'is_start': bool(self.is_start),
-            'teams': [team.to_dict() for team in self.teams]
+            'teams': [team.key for team in self.teams]
         }
 
     def to_json(self):
@@ -256,6 +301,34 @@ class Step(object):
         if isinstance(next_step, Step):
             action.add_outgoing_step(next_step)
         return action
+
+    def get_actions(self, name=None):
+        """Return a list object of any actions following this step."""
+        step_actions = []
+        for action in self.process._actions.itervalues():
+            if name is not None and action.name != name:
+                continue
+            for step in action._incoming.itervalues():
+                if step == self:
+                    step_actions.append(action)
+        return step_actions
+
+    def delete_action(self, name):
+        """Delete all actions matching a given name from this step."""
+        for action in self.get_actions(name):
+            action_key = action.key
+            del self.process._actions[action_key]
+            del action
+
+    def update_action(self, old_name, new_name, next_step=None,
+        is_complete=None):
+        """Update an existing action after this step."""
+        for action in self.get_actions(old_name):
+            action.name = new_name
+            if is_complete is not None:
+                action.is_complete = bool(is_complete)
+            if isinstance(next_step, Step):
+                action.add_outgoing_step(next_step)
 
 
 class Action(object):
@@ -291,13 +364,24 @@ class Action(object):
         if not data or not isinstance(data, dict):
             return None
 
-        process = data.get('process', None)
+        process_key = data.get('process', None)
         name = data.get('name', None)
         is_complete = data.get('is_complete', None)
         key = data.get('key', None)
+        incoming = data.get('incoming', None)
+        outgoing = data.get('outgoing', None)
+
+        process = _PROCESSES.get(process_key, None)
 
         action = cls(process=process, name=name, is_complete=is_complete,
             key=key)
+        for step_key in incoming:
+            step = process._steps.get(step_key, None)
+            action.add_incoming_step(step)
+        for step_key in outgoing:
+            step = process._steps.get(step_key, None)
+            action.add_outgoing_step(step)
+
         return action
 
     def add_incoming_step(self, step):
@@ -320,10 +404,8 @@ class Action(object):
             'process': self.process.key,
             'name': self.name,
             'is_complete': bool(self.is_complete),
-            'incoming': [step.to_dict() for step in
-                self._incoming.itervalues()],
-            'outgoing': [step.to_dict() for step in
-                self._outgoing.itervalues()]
+            'incoming': [step_key for step_key in self._incoming.iterkeys()],
+            'outgoing': [step_key for step_key in self._outgoing.iterkeys()]
         }
 
     def to_json(self):
@@ -356,9 +438,9 @@ class Request(object):
 
         process = data.get('process', None)
         requestor = data.get('requestor', None)
-        key = data.get('key', None)
+        request_key = data.get('key', None)
 
-        request = cls(process=process, requestor=requestor, key=key)
+        request = cls(process=process, requestor=requestor, key=request_key)
         for key, value in data.iteritems():
             if not hasattr(request, key):
                 setattr(request, key, value)
@@ -379,7 +461,7 @@ class Request(object):
 
 class Client(object):
     realm = 'http://flomosa.appspot.com'
-    debug = False
+    debug = True
     endpoints = {
         'processes': 'processes/%(key)s.json',
         'process_stats': 'stats/process/%(key)s.json',
