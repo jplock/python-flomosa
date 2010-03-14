@@ -13,6 +13,6 @@ flomosa.Client.debug = False
 
 client = flomosa.Client(KEY, SECRET, host='127.0.0.1', port=8080)
 
-process = client.get_process('127cbe46-6235-4e14-89e9-95566dccbeb5')
+process = client.get_process('test')
 
 print(process.to_dot())

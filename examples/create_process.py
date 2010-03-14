@@ -11,9 +11,12 @@ SECRET = 'test-secret'
 
 client = flomosa.Client(KEY, SECRET, host='127.0.0.1', port=8080)
 
-process = flomosa.Process('Test Process', description='this is a test')
+process = flomosa.Process('Test Process', description='this is a test',
+    key='test')
 
-team = client.get_team('188259da-75d3-435b-9c07-cead04066025')
+resp = client.add_process(process)
+
+team = client.get_team('test')
 
 step1 = process.add_step('1st Approval')
 step1.teams = [team]

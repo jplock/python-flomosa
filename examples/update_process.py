@@ -4,6 +4,8 @@ import os.path
 import sys
 sys.path[0:0] = [os.path.join(os.path.dirname(__file__), '..'),]
 
+from pprint import pprint
+
 import flomosa
 
 KEY = 'test-key'
@@ -13,9 +15,14 @@ flomosa.Client.debug = False
 
 client = flomosa.Client(KEY, SECRET, host='127.0.0.1', port=8080)
 
-team = client.get_team('188259da-75d3-435b-9c07-cead04066025')
+team = client.get_team('test')
 
-process = client.get_process('127cbe46-6235-4e14-89e9-95566dccbeb5')
+process = client.get_process('test')
+
+#pprint(process.to_dict())
+print(process.to_dot())
+
+print('###########################')
 
 step1 = process.get_step_by_name('1st Approval')
 step2 = process.get_step_by_name('2nd Approval')
@@ -31,3 +38,13 @@ step4.add_action('This sucks', next_step=step1)
 step4.add_action('F it', next_step=step3)
 
 print(process.to_dot())
+#pprint(process.to_dict())
+
+print('###########################')
+
+resp = client.add_process(process)
+
+process = client.get_process('test')
+
+print(process.to_dot())
+#pprint(process.to_dict())

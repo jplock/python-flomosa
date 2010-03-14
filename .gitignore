@@ -1,6 +1,5 @@
 *.kpf
 *.py?
-*.egg-info
-*.swp
 .coverage
 *.dot
+*.sh

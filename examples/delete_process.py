@@ -13,4 +13,4 @@ flomosa.Client.debug = False
 
 client = flomosa.Client(KEY, SECRET, host='127.0.0.1', port=8080)
 
-resp = client.delete_process('127cbe46-6235-4e14-89e9-95566dccbeb5')
+resp = client.delete_process('test')

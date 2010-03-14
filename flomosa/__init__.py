@@ -280,15 +280,21 @@ class Step(object):
 
     def to_dict(self):
         """Return step as a dict object."""
-        return {
+        data = {
             'kind': 'Step',
             'key': self.key,
             'process': self.process.key,
             'name': self.name,
             'description': self.description,
             'is_start': bool(self.is_start),
-            'teams': [team.key for team in self.teams]
+            'teams': []
         }
+        for team in self.teams:
+            if isinstance(team, Team):
+                data['teams'].append(team.key)
+            else:
+                data['teams'].append(team)
+        return data
 
     def to_json(self):
         """Return step as a JSON string."""
@@ -368,17 +374,15 @@ class Action(object):
         name = data.get('name', None)
         is_complete = data.get('is_complete', None)
         key = data.get('key', None)
-        incoming = data.get('incoming', None)
-        outgoing = data.get('outgoing', None)
 
         process = _PROCESSES.get(process_key, None)
 
         action = cls(process=process, name=name, is_complete=is_complete,
             key=key)
-        for step_key in incoming:
+        for step_key in data.get('incoming'):
             step = process._steps.get(step_key, None)
             action.add_incoming_step(step)
-        for step_key in outgoing:
+        for step_key in data.get('outgoing'):
             step = process._steps.get(step_key, None)
             action.add_outgoing_step(step)
 
