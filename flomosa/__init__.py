@@ -95,6 +95,24 @@ class Process(object):
 
         _PROCESSES[self.key] = self
 
+    def __del__(self):
+        for key, action in self._actions.iteritems():
+            try:
+                del self._actions[key]
+                del action
+            except:
+                pass
+        for key, step in self._steps.iteritems():
+            try:
+                del self._steps[key]
+                del step
+            except:
+                pass
+        try:
+            del _PROCESSES[self.key]
+        except:
+            pass
+
     def __unicode__(self):
         return self.to_json()
 
@@ -125,13 +143,6 @@ class Process(object):
             process._actions[action.key] = action
 
         return process
-
-    def get_step_by_name(self, name):
-        """Find a step by it's name."""
-        for step in self._steps.values():
-            if step.name == name:
-                return step
-        return None
 
     def to_dict(self):
         """Return process as a dict object."""
@@ -177,6 +188,25 @@ class Process(object):
         self._steps[step.key] = step
         return step
 
+    def get_steps_by_name(self, name):
+        """Return the steps matching a given name."""
+        steps = []
+        for step in self._steps.values():
+            if isinstance(step, Step) and step.name == name:
+                steps.append(step)
+        if len(steps) == 1:
+            return steps[0]
+        return steps
+
+    def delete_steps_by_name(self, name):
+        """Delete all steps matching the given name."""
+        for step in self.get_steps_by_name(name):
+            try:
+                del step.process._steps[step.key]
+                del step
+            except:
+                pass
+
 
 class Team(object):
     """Flomosa Team object"""
@@ -191,6 +221,12 @@ class Team(object):
             raise ValueError('Name and Key must be set.')
 
         _TEAMS[self.key] = self
+
+    def __del__(self):
+        try:
+            del _TEAMS[self.key]
+        except:
+            pass
 
     def __unicode__(self):
         return self.to_json()
@@ -250,6 +286,12 @@ class Step(object):
         else:
             self.process._steps[self.key] = self
 
+    def __del__(self):
+        try:
+            del self.process._steps[self.key]
+        except:
+            pass
+
     def __unicode__(self):
         return self.to_json()
 
@@ -308,7 +350,7 @@ class Step(object):
             action.add_outgoing_step(next_step)
         return action
 
-    def get_actions(self, name=None):
+    def get_actions_by_name(self, name=None):
         """Return a list object of any actions following this step."""
         step_actions = []
         for action in self.process._actions.itervalues():
@@ -319,17 +361,16 @@ class Step(object):
                     step_actions.append(action)
         return step_actions
 
-    def delete_action(self, name):
+    def delete_actions_by_name(self, name):
         """Delete all actions matching a given name from this step."""
-        for action in self.get_actions(name):
-            action_key = action.key
-            del self.process._actions[action_key]
+        for action in self.get_actions_by_name(name):
+            del action.process._actions[action.key]
             del action
 
     def update_action(self, old_name, new_name, next_step=None,
         is_complete=None):
         """Update an existing action after this step."""
-        for action in self.get_actions(old_name):
+        for action in self.get_actions_by_name(old_name):
             action.name = new_name
             if is_complete is not None:
                 action.is_complete = bool(is_complete)
@@ -354,6 +395,12 @@ class Action(object):
             raise ValueError('Must be a valid Process instance.')
         else:
             self.process._actions[self.key] = self
+
+    def __del__(self):
+        try:
+            del self.process._actions[self.key]
+        except:
+            pass
 
     def __unicode__(self):
         return self.to_json()

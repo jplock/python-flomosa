@@ -9,7 +9,7 @@ import flomosa
 KEY = 'test-key'
 SECRET = 'test-secret'
 
-client = flomosa.Client(KEY, SECRET, host='127.0.0.1', port=8080)
+client = flomosa.Client(KEY, SECRET) #, host='127.0.0.1', port=8080)
 
 process = flomosa.Process('Test Process', description='this is a test',
     key='test')

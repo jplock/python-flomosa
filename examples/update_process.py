@@ -24,25 +24,30 @@ print(process.to_dot())
 
 print('###########################')
 
-step1 = process.get_step_by_name('1st Approval')
-step2 = process.get_step_by_name('2nd Approval')
-step3 = process.get_step_by_name('3rd Approval')
-step2.update_action('Approved', '2nd Approved is Approved')
+#step2 = process.get_steps_by_name('2nd Approval'):
+#step2.delete_actions_by_name('Send to Bob')
 
-step4 = process.add_step('Bob Approval')
-step4.teams = [team]
+#step4 = process.get_steps_by_name('Bob Approval'):
+#step4.delete_actions_by_name('F it')
+#step2.update_action('Approved', '2nd Approved is Approved')
 
-step2.add_action('Send to Bob', next_step=step4)
+#step4 = process.add_step('Bob Approval')
+#step4.teams = [team]
 
-step4.add_action('This sucks', next_step=step1)
-step4.add_action('F it', next_step=step3)
+#step2.add_action('Send to Bob', next_step=step4)
 
-print(process.to_dot())
+#step4.add_action('This sucks', next_step=step1)
+#step4.add_action('F it', next_step=step3)
+
+#process.delete_steps_by_name('Bob Approval')
+#del step4
+
+#print(process.to_dot())
 #pprint(process.to_dict())
 
 print('###########################')
 
-resp = client.add_process(process)
+#resp = client.add_process(process)
 
 process = client.get_process('test')
 
