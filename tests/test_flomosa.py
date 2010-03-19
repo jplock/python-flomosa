@@ -80,15 +80,15 @@ class TestProcess(unittest.TestCase):
         data = self.process.to_dict()
         self.assertEqual(data.get('name', None), self.name)
         self.assertEqual(data.get('description', None), self.description)
-        self.assertEqual(data.get('id', None), self.key)
+        self.assertEqual(data.get('key', None), self.key)
 
     def test_tojson(self):
         data = json.loads(self.process.to_json())
         self.assertEqual(data.get('name', None), self.name)
         self.assertEqual(data.get('description', None), self.description)
-        self.assertEqual(data.get('id', None), self.key)
+        self.assertEqual(data.get('key', None), self.key)
         process_str = '{"kind": "Process", "description": "test description",' \
-            ' "actions": [], "steps": [], "id": "test-id", "name": ' \
+            ' "actions": [], "steps": [], "key": "test-id", "name": ' \
             '"test process"}'
         self.assertEqual(unicode(self.process), unicode(process_str))
         self.assertEqual(str(self.process), str(process_str))
@@ -179,7 +179,7 @@ class TestStep(unittest.TestCase):
         self.assertEqual(flomosa.Step.from_dict(None), None)
         self.assertEqual(flomosa.Step.from_dict(data=[]), None)
         self.assertEqual(flomosa.Step.from_dict(data={}), None)
-        data = {'name': self.name, 'process': self.process,
+        data = {'name': self.name, 'process': self.process.key,
             'description': self.description, 'key': self.key}
         self.assertEqual(flomosa.Step.from_dict(data), self.step)
         data = {'description': self.description}
@@ -240,7 +240,7 @@ class TestAction(unittest.TestCase):
         self.assertEqual(flomosa.Action.from_dict(None), None)
         self.assertEqual(flomosa.Action.from_dict(data=[]), None)
         self.assertEqual(flomosa.Action.from_dict(data={}), None)
-        data = {'name': self.name, 'process': self.process,
+        data = {'name': self.name, 'process': self.process.key,
             'is_complete': self.is_complete, 'key': self.key}
         self.assertEqual(flomosa.Action.from_dict(data), self.action)
         data = {'is_complete': self.is_complete}

@@ -95,24 +95,6 @@ class Process(object):
 
         _PROCESSES[self.key] = self
 
-    def __del__(self):
-        for key, action in self._actions.iteritems():
-            try:
-                del self._actions[key]
-                del action
-            except:
-                pass
-        for key, step in self._steps.iteritems():
-            try:
-                del self._steps[key]
-                del step
-            except:
-                pass
-        try:
-            del _PROCESSES[self.key]
-        except:
-            pass
-
     def __unicode__(self):
         return self.to_json()
 
@@ -131,14 +113,12 @@ class Process(object):
         name = data.get('name', None)
         description = data.get('description', None)
         process_key = data.get('key', None)
-        actions = data.get('actions', None)
-        steps = data.get('steps', None)
 
         process = cls(name=name, description=description, key=process_key)
-        for step_data in steps:
+        for step_data in data.get('steps', []):
             step = Step.from_dict(step_data)
             process._steps[step.key] = step
-        for action_data in actions:
+        for action_data in data.get('actions', []):
             action = Action.from_dict(action_data)
             process._actions[action.key] = action
 
@@ -202,7 +182,7 @@ class Process(object):
         """Delete all steps matching the given name."""
         for step in self.get_steps_by_name(name):
             try:
-                del step.process._steps[step.key]
+                del self._steps[step.key]
                 del step
             except:
                 pass
@@ -222,12 +202,6 @@ class Team(object):
 
         _TEAMS[self.key] = self
 
-    def __del__(self):
-        try:
-            del _TEAMS[self.key]
-        except:
-            pass
-
     def __unicode__(self):
         return self.to_json()
 
@@ -245,7 +219,7 @@ class Team(object):
 
         name = data.get('name', None)
         description = data.get('description', None)
-        members = data.get('members', None)
+        members = data.get('members', [])
         team_key = data.get('key', None)
 
         team = cls(name=name, description=description, members=members,
@@ -286,12 +260,6 @@ class Step(object):
         else:
             self.process._steps[self.key] = self
 
-    def __del__(self):
-        try:
-            del self.process._steps[self.key]
-        except:
-            pass
-
     def __unicode__(self):
         return self.to_json()
 
@@ -312,9 +280,11 @@ class Step(object):
         name = data.get('name', None)
         description = data.get('description', None)
         is_start = data.get('is_start', None)
-        teams = data.get('teams', None)
+        teams = data.get('teams', [])
 
         process = _PROCESSES.get(process_key, None)
+        if not process:
+            raise ValueError('Process "%s" not found.' % process_key)
 
         step = cls(process=process, name=name, description=description,
             is_start=is_start, teams=teams, key=key)
@@ -364,7 +334,7 @@ class Step(object):
     def delete_actions_by_name(self, name):
         """Delete all actions matching a given name from this step."""
         for action in self.get_actions_by_name(name):
-            del action.process._actions[action.key]
+            del self.process._actions[action.key]
             del action
 
     def update_action(self, old_name, new_name, next_step=None,
@@ -396,12 +366,6 @@ class Action(object):
         else:
             self.process._actions[self.key] = self
 
-    def __del__(self):
-        try:
-            del self.process._actions[self.key]
-        except:
-            pass
-
     def __unicode__(self):
         return self.to_json()
 
@@ -423,13 +387,15 @@ class Action(object):
         key = data.get('key', None)
 
         process = _PROCESSES.get(process_key, None)
+        if not process:
+            raise ValueError('Process "%s" not found.' % process_key)
 
         action = cls(process=process, name=name, is_complete=is_complete,
             key=key)
-        for step_key in data.get('incoming'):
+        for step_key in data.get('incoming', []):
             step = process._steps.get(step_key, None)
             action.add_incoming_step(step)
-        for step_key in data.get('outgoing'):
+        for step_key in data.get('outgoing', []):
             step = process._steps.get(step_key, None)
             action.add_outgoing_step(step)
 
@@ -461,52 +427,6 @@ class Action(object):
 
     def to_json(self):
         """Return action as a JSON string."""
-        return json.dumps(self.to_dict())
-
-
-class Request(object):
-    """Flomosa Request object"""
-
-    def __init__(self, process, requestor, key=None):
-        self.key = key or generate_key()
-        self.process = process
-        self.requestor = requestor
-
-    def __unicode__(self):
-        return self.to_json()
-
-    def __str__(self):
-        return self.__unicode__()
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.key == other.key
-
-    @classmethod
-    def from_dict(cls, data):
-        """Return a new Request instance from a dict object."""
-        if not data or not isinstance(data, dict):
-            return None
-
-        process = data.get('process', None)
-        requestor = data.get('requestor', None)
-        request_key = data.get('key', None)
-
-        request = cls(process=process, requestor=requestor, key=request_key)
-        for key, value in data.iteritems():
-            if not hasattr(request, key):
-                setattr(request, key, value)
-
-        return request
-
-    def to_dict(self):
-        """Return request as a dict object."""
-        data = {'kind': 'Request'}
-        for key in dir(self):
-            data[key] = getattr(self, key)
-        return data
-
-    def to_json(self):
-        """Return request as a JSON string."""
         return json.dumps(self.to_dict())
 
 
@@ -635,7 +555,10 @@ class Client(object):
             headers=headers)
 
         if self.debug:
+            print(headers)
+            print('-------------')
             print(resp)
+            print('-------------')
             print(content)
 
         if content: # Empty body is allowed.
