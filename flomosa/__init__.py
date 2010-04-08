@@ -83,10 +83,11 @@ class DecodeError(APIError):
 class Process(object):
     """Flomosa Process object"""
 
-    def __init__(self, name, description=None, key=None):
+    def __init__(self, name, description=None, collect_stats=False, key=None):
         self.key = key or generate_key()
         self.name = name
         self.description = description
+        self.collect_stats = collect_stats
         self._steps = {}
         self._actions = {}
 
@@ -113,8 +114,12 @@ class Process(object):
         name = data.get('name', None)
         description = data.get('description', None)
         process_key = data.get('key', None)
+        collect_stats = data.get('collect_stats', False)
 
-        process = cls(name=name, description=description, key=process_key)
+        process = cls(name=name,
+            description=description,
+            collect_stats=collect_stats,
+            key=process_key)
         for step_data in data.get('steps', []):
             step = Step.from_dict(step_data)
             process._steps[step.key] = step
@@ -131,6 +136,7 @@ class Process(object):
             'key': self.key,
             'name': self.name,
             'description': self.description,
+            'collect_stats': self.collect_stats,
             'steps': [step.to_dict() for step in self._steps.itervalues()],
             'actions': [action.to_dict() for action in
                 self._actions.itervalues()]
@@ -160,11 +166,12 @@ class Process(object):
 
         return 'digraph "%s" {\n%s\n%s}' % (self.name, nodes, actions)
 
-    def add_step(self, name, teams=None, is_start=False, key=None):
+    def add_step(self, name, team=None, members=None, is_start=False, key=None):
         """Add a step to this process."""
         if not self._steps:
             is_start = True
-        step = Step(self, name, is_start=is_start, teams=teams, key=key)
+        step = Step(self, name, is_start=is_start, team=team, members=members,
+            key=key)
         self._steps[step.key] = step
         return step
 
@@ -245,13 +252,14 @@ class Step(object):
     """Flomosa Step object"""
 
     def __init__(self, process, name, description=None, is_start=False,
-        teams=None, key=None):
+        team=None, members=None, key=None):
         self.key = key or generate_key()
         self.process = process
         self.name = name
         self.description = description
         self.is_start = bool(is_start)
-        self.teams = teams or []
+        self.members = members or []
+        self.team = team
 
         if not self.process or not self.name or not self.key:
             raise ValueError('Process, Name and Key must be set.')
@@ -280,14 +288,15 @@ class Step(object):
         name = data.get('name', None)
         description = data.get('description', None)
         is_start = data.get('is_start', None)
-        teams = data.get('teams', [])
+        members = data.get('members', [])
+        team = data.get('team', None)
 
         process = _PROCESSES.get(process_key, None)
         if not process:
             raise ValueError('Process "%s" not found.' % process_key)
 
         step = cls(process=process, name=name, description=description,
-            is_start=is_start, teams=teams, key=key)
+            is_start=is_start, team=team, members=members, key=key)
         return step
 
     def to_dict(self):
@@ -299,13 +308,12 @@ class Step(object):
             'name': self.name,
             'description': self.description,
             'is_start': bool(self.is_start),
-            'teams': []
+            'members': self.members
         }
-        for team in self.teams:
-            if isinstance(team, Team):
-                data['teams'].append(team.key)
-            else:
-                data['teams'].append(team)
+        if isinstance(self.team, Team):
+            data['team'] = self.team.key
+        else:
+            data['team'] = self.team
         return data
 
     def to_json(self):
