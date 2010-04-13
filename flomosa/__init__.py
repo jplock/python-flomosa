@@ -446,7 +446,6 @@ class Client(object):
         'process_stats': 'stats/process/%(key)s.json',
         'process_search': 'search/process/%(key)s.json',
         'teams': 'teams/%(key)s.json',
-        'step_stats': 'stats/step/%(key)s.json',
         'step_search': 'search/step/%(key)s.json'
     }
 
@@ -508,10 +507,6 @@ class Client(object):
 
     def get_process_stats(self, key):
         endpoint = self.endpoint('process_stats', key=key)
-        return self._request(endpoint, 'GET')
-
-    def get_step_stats(self, key):
-        endpoint = self.endpoint('step_stats', key=key)
         return self._request(endpoint, 'GET')
 
     def search_process(self, key, start=None, end=None, limit=None):
