@@ -324,7 +324,7 @@ class Step(object):
         """Add an action after this step."""
         action = Action(self.process, name, is_complete=is_complete, key=key)
         action.add_incoming_step(self)
-        if isinstance(next_step, Step):
+        if next_step and isinstance(next_step, Step):
             action.add_outgoing_step(next_step)
         return action
 
@@ -352,7 +352,7 @@ class Step(object):
             action.name = new_name
             if is_complete is not None:
                 action.is_complete = bool(is_complete)
-            if isinstance(next_step, Step):
+            if next_step and isinstance(next_step, Step):
                 action.add_outgoing_step(next_step)
 
 
@@ -419,6 +419,7 @@ class Action(object):
         """Add an outgoing Step to this Action."""
         if not isinstance(step, Step):
             raise ValueError('Must be a valid Step instance.')
+        self.is_complete = False
         self._outgoing[step.key] = step
 
     def to_dict(self):
@@ -443,11 +444,23 @@ class Client(object):
     debug = True
     endpoints = {
         'processes': 'processes/%(key)s.json',
-        'process_stats': 'stats/process/%(key)s.json',
         'process_search': 'search/process/%(key)s.json',
         'teams': 'teams/%(key)s.json',
-        'step_search': 'search/step/%(key)s.json'
+        'requests': 'requests/%(key)s.json',
+        'step_search': 'search/step/%(key)s.json',
+        'stats_year': 'stats/by-year/%(key)s.json',
+        'stats_month': 'stats/by-month/%(key)s.json',
+        'stats_week': 'stats/by-week/%(key)s.json',
+        'stats_day': 'stats/by-day/%(key)s.json'
     }
+    stats = (
+        'num_requests',
+        'num_requests_completed',
+        'min_request_seconds',
+        'max_request_seconds',
+        'avg_request_seconds',
+        'total_request_seconds'
+    )
 
     def __init__(self, key, secret, api_version=API_VERSION,
         host='flomosa.appspot.com', port=80):
@@ -481,6 +494,20 @@ class Client(object):
             raise TypeError('Missing required argument "%s"' % (e.args[0],))
         return urljoin(urljoin(self.uri, '/'), endpoint)
 
+    def filter(self, filter):
+        """Filter statistics returned."""
+        if filter:
+            if filter in self.stats:
+                return filter
+            elif isinstance(filter, list):
+                new_filter = []
+                for key in filter:
+                    if key in self.stats:
+                        new_filter.append(key)
+                if new_filter:
+                    return ','.join(new_filter)
+        return None
+
     def add_process(self, process):
         endpoint = self.endpoint('processes', key=process.key)
         return self._request(endpoint, 'PUT', process.to_json())
@@ -488,6 +515,10 @@ class Client(object):
     def get_process(self, key):
         endpoint = self.endpoint('processes', key=key)
         return Process.from_dict(self._request(endpoint, 'GET'))
+
+    def get_request(self, key):
+        endpoint = self.endpoint('requests', key=key)
+        return self._request(endpoint, 'GET')
 
     def delete_process(self, key):
         endpoint = self.endpoint('processes', key=key)
@@ -505,9 +536,45 @@ class Client(object):
         endpoint = self.endpoint('teams', key=key)
         return self._request(endpoint, 'DELETE')
 
-    def get_process_stats(self, key):
-        endpoint = self.endpoint('process_stats', key=key)
-        return self._request(endpoint, 'GET')
+    def get_year_stats(self, key, year, filter=None):
+        data = {
+            'year': year
+        }
+        if filter is not None:
+            data['filter'] = self.filter(filter)
+        endpoint = self.endpoint('stats_year', key=key)
+        return self._request(endpoint, 'GET', data)
+
+    def get_month_stats(self, key, year, month, filter=None):
+        data = {
+            'year': year,
+            'month': month
+        }
+        if filter is not None:
+            data['filter'] = self.filter(filter)
+        endpoint = self.endpoint('stats_month', key=key)
+        return self._request(endpoint, 'GET', data)
+
+    def get_week_stats(self, key, year, week_num, filter=None):
+        data = {
+            'year': year,
+            'week_num': week_num,
+        }
+        if filter is not None:
+            data['filter'] = self.filter(filter)
+        endpoint = self.endpoint('stats_week', key=key)
+        return self._request(endpoint, 'GET', data)
+
+    def get_day_stats(self, key, year, month, day, filter=None):
+        data = {
+            'year': year,
+            'month': month,
+            'day': day
+        }
+        if filter is not None:
+            data['filter'] = self.filter(filter)
+        endpoint = self.endpoint('stats_day', key=key)
+        return self._request(endpoint, 'GET', data)
 
     def search_process(self, key, start=None, end=None, limit=None):
         data = {}
@@ -517,7 +584,9 @@ class Client(object):
                 data['end'] = time.time()
             else:
                 data['end'] = end
-        if limit is not None:
+        if limit is None:
+            data['limit'] = limit
+        else:
             data['limit'] = 25
         endpoint = self.endpoint('process_search', key=key)
         return self._request(endpoint, 'GET', data)
@@ -530,7 +599,9 @@ class Client(object):
                 data['end'] = time.time()
             else:
                 data['end'] = end
-        if limit is not None:
+        if limit is None:
+            data['limit'] = limit
+        else:
             data['limit'] = 25
         endpoint = self.endpoint('step_search', key=key)
         return self._request(endpoint, 'GET', data)

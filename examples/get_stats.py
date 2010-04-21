@@ -24,11 +24,12 @@ if os.environ['HOST'] == 'philjr.local':
 else:
     client = flomosa.Client(KEY, SECRET)
 
-team = flomosa.Team('Test Team2', description='this is a test', key='test')
-team.members = ['jplock@gmail.com']
+filter = ['num_requests']#, 'num_requests_completed']
 
-resp = client.add_team(team)
-#team = client.get_team('test')
-#client.delete_team('test')
+stats = client.get_year_stats('test', 2010, filter=filter)
 
-print(team)
+stats = client.get_month_stats('test', 2010, 4, filter=filter)
+
+stats = client.get_week_stats('test', 2010, 16, filter=filter)
+
+stats = client.get_day_stats('test', 2010, 4, 20, filter=filter)
